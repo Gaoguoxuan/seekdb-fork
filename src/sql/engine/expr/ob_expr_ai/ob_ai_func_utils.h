@@ -244,6 +244,8 @@ public:
   static int get_json_boolean(ObIAllocator &allocator, bool value, ObJsonBoolean *&boolean_node);
   static int get_json_object_form_str(ObIAllocator &allocator, ObString &str, ObJsonObject *&obj_node);
   static int print_json_to_str(ObIAllocator &allocator, ObIJsonBase *base_node, ObString &str);
+  static int get_array_index(const ObJsonNode *node, int64_t count, int64_t &index);
+  static int validate_embedding(const ObJsonNode *node, int64_t dimension = 0);
   static int compact_json_object(ObIAllocator &allocator, ObJsonObject *obj_node, ObJsonObject *compact_obj);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncJsonUtils);
@@ -353,6 +355,8 @@ public:
    virtual ~ObAIFuncModel() {}
    // completion
    int call_completion(ObString &prompt, ObJsonObject *config, ObString &result);
+   int call_completion(ObString &system_prompt, ObString &content,
+                       ObJsonObject *config, ObString &result);
    int call_completion_vector(ObArray<ObString> &prompts, ObJsonObject *config, ObArray<ObString> &results);
    // dense_embedding
    int call_dense_embedding(ObString &content, ObJsonObject *config, ObString &result);
@@ -382,6 +386,8 @@ public:
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";
 private:
+  static int render_prompt(ObIAllocator &allocator, ObJsonObject *prompt_object,
+                           ObString &result, const int64_t depth);
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncPromptObjectUtils);
 };
 

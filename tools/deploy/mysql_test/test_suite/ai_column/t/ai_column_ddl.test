@@ -60,6 +60,13 @@ join oceanbase.__all_column c
 where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'docs'
   and c.is_hidden = 1;
 
+select count(*) = 2 as typed_staging_columns
+from oceanbase.__all_column c
+join oceanbase.__all_table t on t.table_id = c.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'docs'
+  and c.is_hidden = 1 and c.column_name like '__ai_stage_%';
+
 select count(*) = 2 as result_columns_are_user_visible
 from oceanbase.__all_ai_column a
 join oceanbase.__all_table t on t.table_id = a.table_id

@@ -5460,6 +5460,7 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   } else if (OB_FAIL(spec.external_properties_.store_str(op.get_external_properties()))) {
   } else if (OB_FAIL(spec.user_vars_.init(op.get_user_vars().count()))) {
   } else if (OB_FAIL(spec.select_exprs_.init(op.get_select_exprs().count()))) {
+  } else if (OB_FAIL(spec.header_names_.init(op.get_select_exprs().count()))) {
   } else {
     ObString var;
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_user_vars().count(); ++i) {
@@ -5470,11 +5471,19 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_select_exprs().count(); ++i) {
       ObExpr *rt_expr = nullptr;
+      ObString header_name;
       const ObRawExpr* select_expr = op.get_select_exprs().at(i);
       if (OB_ISNULL(select_expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(generate_rt_expr(*select_expr, rt_expr))) {
       } else if (OB_FAIL(spec.select_exprs_.push_back(rt_expr))) {
+      } else if (OB_FAIL(ob_write_string(alloc,
+                   i < op.get_output_names().count() && !op.get_output_names().at(i).empty()
+                       ? op.get_output_names().at(i)
+                       : (select_expr->get_alias_column_name().empty()
+                              ? select_expr->get_expr_name() : select_expr->get_alias_column_name()),
+                   header_name))) {
+      } else if (OB_FAIL(spec.header_names_.push_back(header_name))) {
       }
     }
     if (OB_SUCC(ret)) {
@@ -5499,10 +5508,14 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
   ObIAllocator &alloc = phy_plan_->get_allocator();
   ObRawExpr *value_raw_expr = nullptr;
   ObExpr *value_expr = nullptr;
+  const TableItem *table_item = nullptr;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op.get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(spec.column_exprs_.init(op.get_stmt()->get_column_size()))) {
+  } else if (OB_ISNULL(table_item = op.get_stmt()->get_table_item_by_id(op.get_table_id()))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(spec.column_exprs_.init(op.get_stmt()->get_column_size()))
+             || OB_FAIL(spec.file_column_indexes_.init(op.get_stmt()->get_column_size()))) {
   } else if (OB_UNLIKELY(op.get_num_of_child() > 1)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(value_raw_expr = op.get_value_expr())) {
@@ -5511,6 +5524,18 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
   } else {
     spec.has_correlated_expr_ = value_raw_expr->has_flag(CNT_DYNAMIC_PARAM);
     spec.value_expr_ = value_expr;
+    spec.is_file_sql_ = table_item->is_file_sql_table_;
+    spec.is_file_sql_json_ = table_item->is_file_sql_json_;
+    spec.is_file_sql_parquet_ = table_item->is_file_sql_parquet_;
+    spec.is_file_sql_glob_ = table_item->is_file_sql_glob_;
+    spec.file_has_header_ = table_item->file_sql_has_header_;
+    spec.file_sql_version_ = table_item->file_sql_version_;
+    spec.file_field_delimiter_ = table_item->file_sql_delimiter_;
+    spec.file_quote_char_ = table_item->file_sql_quote_;
+    spec.file_escape_char_ = table_item->file_sql_escape_;
+    if (!table_item->file_sql_null_string_.empty()) {
+      OZ (ob_write_string(alloc, table_item->file_sql_null_string_, spec.file_null_string_));
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_output_exprs().count(); ++i) {
       if (OB_FAIL(mark_expr_self_produced(op.get_output_exprs().at(i)))) {
       }
@@ -5526,6 +5551,19 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
         OZ (mark_expr_self_produced(col_item->expr_));
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
         OZ (spec.column_exprs_.push_back(rt_expr));
+        if (OB_SUCC(ret) && table_item->is_file_sql_table_) {
+          if (col_item->column_id_ < OB_APP_MIN_COLUMN_ID) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            OZ (spec.file_column_indexes_.push_back(
+                    static_cast<int64_t>(col_item->column_id_ - OB_APP_MIN_COLUMN_ID)));
+          }
+        }
+        if (OB_SUCC(ret) && table_item->is_file_sql_json_) {
+          ObString owned_column_name;
+          OZ (ob_write_string(alloc, col_item->column_name_, owned_column_name, true));
+          OZ (spec.file_column_names_.push_back(owned_column_name));
+        }
       }
     }
   }

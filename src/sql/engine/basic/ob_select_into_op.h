@@ -58,6 +58,7 @@ public:
     : ObOpSpec(alloc, type),
       into_type_(T_INTO_OUTFILE),
       user_vars_(alloc),
+      header_names_(alloc),
       outfile_name_(),
       field_str_(),
       line_str_(),
@@ -77,6 +78,7 @@ public:
 
   ObItemType into_type_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> user_vars_;
+  common::ObFixedArray<common::ObString, common::ObIAllocator> header_names_;
   common::ObObj outfile_name_;
   common::ObObj field_str_;
   common::ObObj line_str_;
@@ -197,6 +199,7 @@ public:
 private:
   int init_env_common();
   int init_csv_env();
+  int write_csv_header(ObCsvFileWriter &data_writer);
   void set_csv_format_options();
 
   int get_row_str(const int64_t buf_len, bool is_first_row, char *buf, int64_t &pos);

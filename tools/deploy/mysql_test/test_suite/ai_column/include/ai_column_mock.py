@@ -122,6 +122,8 @@ def serve(port):
 
             if "slow-old" in user_text:
                 time.sleep(1.2)
+            elif "mixed-" in user_text:
+                time.sleep(0.35)
             else:
                 time.sleep(0.05)
 

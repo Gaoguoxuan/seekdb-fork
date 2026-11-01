@@ -1,0 +1,31 @@
+# owner group: storage
+# description: check IK parser tokenization across successive indexed documents.
+
+--disable_warnings
+DROP DATABASE IF EXISTS fts_ik_multidoc;
+--enable_warnings
+CREATE DATABASE fts_ik_multidoc;
+USE fts_ik_multidoc;
+
+CREATE TABLE docs (
+  id BIGINT PRIMARY KEY,
+  body TEXT
+);
+
+# The empty row between documents also checks that a skipped row does not
+# affect tokenization of the following document.
+INSERT INTO docs VALUES
+  (1, 'alphaonly'),
+  (2, ''),
+  (3, 'betaonly'),
+  (4, 'gammaonly'),
+  (5, 'deltaonly');
+
+CREATE FULLTEXT INDEX idx_body ON docs(body) WITH PARSER ik;
+
+SELECT id FROM docs WHERE MATCH(body) AGAINST('alphaonly' IN BOOLEAN MODE);
+SELECT id FROM docs WHERE MATCH(body) AGAINST('betaonly' IN BOOLEAN MODE);
+SELECT id FROM docs WHERE MATCH(body) AGAINST('gammaonly' IN BOOLEAN MODE);
+SELECT id FROM docs WHERE MATCH(body) AGAINST('deltaonly' IN BOOLEAN MODE);
+
+DROP DATABASE fts_ik_multidoc;

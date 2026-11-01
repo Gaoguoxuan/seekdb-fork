@@ -1108,7 +1108,7 @@ private:
 
 struct ObAlterTableArg : public ObDDLArg
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   enum ModifiableTableColumns {
        AUTO_INCREMENT = 1,
@@ -1195,7 +1195,10 @@ public:
       lock_session_id_(0),
       lock_session_create_ts_(0),
       lock_priority_(transaction::tablelock::ObTableLockPriority::NORMAL),
-      data_version_(0)
+      data_version_(0),
+      is_ai_column_retry_(false),
+      ai_column_name_(),
+      ai_column_predicate_()
   {
   }
   virtual ~ObAlterTableArg()
@@ -1268,7 +1271,10 @@ public:
                K_(lock_session_id),
                K_(lock_session_create_ts),
                K_(lock_priority),
-               K_(data_version));
+               K_(data_version),
+               K_(is_ai_column_retry),
+               K_(ai_column_name),
+               K_(ai_column_predicate));
 private:
   int alloc_index_arg(const ObIndexArg::IndexActionType index_action_type, ObIndexArg *&index_arg);
 public:
@@ -1302,6 +1308,9 @@ public:
   int64_t lock_session_create_ts_;
   transaction::tablelock::ObTableLockPriority lock_priority_;
   uint64_t data_version_;
+  bool is_ai_column_retry_;
+  common::ObString ai_column_name_;
+  common::ObString ai_column_predicate_;
   int serialize_index_args(char *buf, const int64_t data_len, int64_t &pos) const;
   int deserialize_index_args(const char *buf, const int64_t data_len, int64_t &pos);
   int64_t get_index_args_serialize_size() const;

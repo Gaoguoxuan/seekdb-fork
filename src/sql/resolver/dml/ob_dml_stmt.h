@@ -150,6 +150,16 @@ struct TableItem
     snapshot_query_expr_ = nullptr;
     snapshot_query_type_ = SnapshotQueryType::NOT_USING;
     function_table_expr_ = nullptr;
+    is_file_sql_table_ = false;
+    is_file_sql_json_ = false;
+    is_file_sql_parquet_ = false;
+    is_file_sql_glob_ = false;
+    file_sql_version_ = 0;
+    file_sql_has_header_ = true;
+    file_sql_delimiter_ = ',';
+    file_sql_quote_ = '"';
+    file_sql_escape_ = '"';
+    file_sql_null_string_ = common::ObString::make_string("NULL");
     ddl_schema_version_ = 0;
     ddl_table_id_ = common::OB_INVALID_ID;
     json_table_def_ = nullptr;
@@ -293,6 +303,17 @@ struct TableItem
   ObRawExpr *snapshot_query_expr_;
   SnapshotQueryType snapshot_query_type_;
   ObRawExpr *function_table_expr_;
+  // Marks a table function whose rows come from a local read-only file scan.
+  bool is_file_sql_table_;
+  bool is_file_sql_json_;
+  bool is_file_sql_parquet_;
+  bool is_file_sql_glob_;
+  uint64_t file_sql_version_;
+  bool file_sql_has_header_;
+  char file_sql_delimiter_;
+  char file_sql_quote_;
+  char file_sql_escape_;
+  common::ObString file_sql_null_string_;
   int64_t ddl_schema_version_;
   int64_t ddl_table_id_;
   // table partition

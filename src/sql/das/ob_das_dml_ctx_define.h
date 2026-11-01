@@ -93,9 +93,11 @@ public:
       uint64_t is_update_pk_                    : 1;
       uint64_t is_vec_hnsw_index_vid_opt_       : 1;  // hnsw index vid opt for tables without pk
       uint64_t skip_check_schema_version_       : 1;  // skip storage schema_version validation for special internal writes
-      uint64_t reserved_                        : 51; //add new flag before reserved_
+      uint64_t is_ai_column_table_              : 1;
+      uint64_t reserved_                        : 50; //add new flag before reserved_
     };
   };
+  inline bool has_ai_column() const { return is_ai_column_table_; }
 protected:
   ObDASDMLBaseCtDef(common::ObIAllocator &alloc, ObDASOpType op_type)
     : ObDASBaseCtDef(op_type),

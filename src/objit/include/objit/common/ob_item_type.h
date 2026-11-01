@@ -2148,6 +2148,7 @@ typedef enum ObItemType
   T_NO_TRANSFORM_DISTINCT_AGG = 4744,
 
   T_UNNEST_EXPRESSION = 4745,
+  T_FILE_TABLE_EXPRESSION = 4746,
   T_TG_DB_SCHEMA = 4752,
   T_TG_SYS_EVENT_OPTION = 4753,
   T_TG_SYS_EVENT = 4754,
@@ -2274,6 +2275,8 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
+  T_AI_COLUMN = 4921,
+  T_AI_COLUMN_RETRY = 4922,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

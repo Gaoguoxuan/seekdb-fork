@@ -103,8 +103,8 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
     ObAIFuncExprInfo *info = nullptr;
     ObString model_id = arg_model_id->get_string();
     ObString prompt;
+    ObString system_prompt;
     ObJsonObject *config = nullptr;
-    ObString config_str;
     share::ObAiModelEndpointInfo resolved_endpoint;
     const share::ObAiModelEndpointInfo *endpoint_info = &resolved_endpoint;
     query::ObIAiEndpointResolver *endpoint_resolver =
@@ -124,18 +124,39 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "prompt is not valid");
         res.set_null();
-      } else if (!ObAIFuncJsonUtils::ob_is_json_array_all_str(static_cast<ObJsonArray *>(prompt_object->get_value(ObAIFuncPromptObjectUtils::prompt_args_key)))) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "prompt object is not support");
       } else if (OB_FAIL(ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(temp_allocator, prompt_object, prompt))) {
       }
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_prompt, expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), prompt))) {
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(arg_config)) {
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_config, expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), config_str))) {
-      } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(temp_allocator, config_str, config))) {
+    } else if (OB_NOT_NULL(arg_config) && !arg_config->is_null()) {
+      ObIJsonBase *config_value = nullptr;
+      bool is_null = false;
+      if (OB_FAIL(ObJsonExprHelper::get_json_doc(
+              expr, ctx, temp_allocator, CONFIG_IDX, config_value, is_null))) {
+      } else if (is_null || OB_ISNULL(config_value)
+                 || config_value->json_type() != ObJsonNodeType::J_OBJECT) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, config must be a JSON object");
+      } else {
+        config = static_cast<ObJsonObject *>(config_value);
+      }
+    }
+
+    if (OB_SUCC(ret) && OB_NOT_NULL(config)) {
+      const ObString system_prompt_key("__ai_column_system_prompt");
+      ObJsonNode *system_prompt_node = config->get_value(system_prompt_key);
+      if (OB_NOT_NULL(system_prompt_node)) {
+        if (system_prompt_node->json_type() != ObJsonNodeType::J_STRING) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "AI column system prompt must be a string");
+        } else {
+          system_prompt = static_cast<ObJsonString *>(system_prompt_node)->get_str();
+          if (OB_FAIL(config->remove(system_prompt_key))) {
+            LOG_WARN("failed to remove AI column system prompt from provider config", K(ret));
+          }
+        }
       }
     }
 
@@ -155,7 +176,7 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
     } else {
       ObAIFuncModel model(temp_allocator, *info, *endpoint_info);
       ObString result;
-      if (OB_FAIL(model.call_completion(prompt, config, result))) {
+      if (OB_FAIL(model.call_completion(system_prompt, prompt, config, result))) {
       } else if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx, res, result))) {
       }
     }

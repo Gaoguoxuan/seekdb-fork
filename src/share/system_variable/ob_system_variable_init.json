@@ -10975,5 +10975,31 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""
+  },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "whether SQL may query local files as tables",
+    "flags": "SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
+    "publish_version": "1.0.0.0",
+    "info_cn": "是否允许 SQL 将本地文件作为表查询",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "ai_column_strict_read": {
+    "id": 10755,
+    "name": "ai_column_strict_read",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "reject reads that reference AI columns with incomplete derived values",
+    "flags": "SESSION | NEED_SERIALIZE",
+    "publish_version": "1.0.0.0",
+    "info_cn": "引用尚未完成的 AI 列时拒绝查询",
+    "background_cn": "",
+    "ref_url": ""
   }
 }

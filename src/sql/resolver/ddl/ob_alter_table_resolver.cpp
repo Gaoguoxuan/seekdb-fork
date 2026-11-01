@@ -25,6 +25,8 @@
 #include "sql/session/ob_local_session_var.h"
 #include "query/command/ob_root_command_service.h"
 #include "query/vector/ob_vector_index_util.h"
+#include "lib/string/ob_sql_string.h"
+#include <cstdio>
 
 namespace oceanbase
 {
@@ -454,6 +456,103 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             }
             break;
           }
+        case T_AI_COLUMN_RETRY: {
+          ObAlterTableArg &alter_arg = alter_table_stmt->get_alter_table_arg();
+          if (alter_table_stmt->get_alter_table_action_count() != 1) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "combining AI COLUMN RETRY with another ALTER action");
+          }
+          if (OB_SUCC(ret) && action_node->num_child_ != 2) {
+            ret = OB_ERR_UNEXPECTED;
+            SQL_RESV_LOG(ERROR, "invalid AI COLUMN RETRY action node", K(ret), K(action_node->num_child_));
+          }
+          if (OB_SUCC(ret) && OB_ISNULL(action_node->children_)) {
+            ret = OB_SIZE_OVERFLOW;
+          }
+          if (OB_SUCC(ret) && OB_ISNULL(action_node->children_[0])) {
+            ret = OB_ERR_UNEXPECTED;
+          }
+          if (OB_SUCC(ret)) {
+            ParseNode *column_node = action_node->children_[0];
+            const ObString column_name(column_node->str_len_, column_node->str_value_);
+            const ObColumnSchemaV2 *result_column = nullptr;
+            char state_name[OB_MAX_COLUMN_NAME_LENGTH + 1];
+            char request_name[OB_MAX_COLUMN_NAME_LENGTH + 1];
+            char spec_prefix_buf[OB_MAX_COLUMN_NAME_LENGTH + 1];
+            const int state_len = snprintf(state_name, sizeof(state_name), "__ai_state_%lu",
+                                           table_schema_->get_column_schema(column_name) == nullptr
+                                               ? 0UL
+                                               : table_schema_->get_column_schema(column_name)->get_column_id());
+            const int request_len = snprintf(request_name, sizeof(request_name), "__ai_request_%lu",
+                                             table_schema_->get_column_schema(column_name) == nullptr
+                                                 ? 0UL
+                                                 : table_schema_->get_column_schema(column_name)->get_column_id());
+            const uint64_t result_column_id = table_schema_->get_column_schema(column_name) == nullptr
+                                                  ? OB_INVALID_ID
+                                                  : table_schema_->get_column_schema(column_name)->get_column_id();
+            const int spec_prefix_len = snprintf(spec_prefix_buf, sizeof(spec_prefix_buf),
+                                                 "__ai_spec_%lu_", result_column_id);
+            bool has_spec = false;
+            if (OB_ISNULL(column_node->str_value_) || column_node->str_len_ <= 0
+                || OB_ISNULL(result_column = table_schema_->get_column_schema(column_name))
+                || result_column->is_hidden()) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED, "AI COLUMN RETRY target must be an AI column");
+            } else if (state_len <= 0 || state_len >= sizeof(state_name)
+                       || request_len <= 0 || request_len >= sizeof(request_name)
+                       || spec_prefix_len <= 0 || spec_prefix_len >= sizeof(spec_prefix_buf)) {
+              ret = OB_SIZE_OVERFLOW;
+            } else {
+              ObString state_col_name(state_len, state_name);
+              ObString request_col_name(request_len, request_name);
+              ObString spec_prefix(spec_prefix_len, spec_prefix_buf);
+              if (OB_ISNULL(table_schema_->get_column_schema(state_col_name))
+                  || OB_ISNULL(table_schema_->get_column_schema(request_col_name))) {
+                ret = OB_NOT_SUPPORTED;
+                LOG_USER_ERROR(OB_NOT_SUPPORTED, "AI COLUMN RETRY target must be an AI column");
+              }
+              for (ObTableSchema::const_column_iterator it = table_schema_->column_begin();
+                   OB_SUCC(ret) && !has_spec && it != table_schema_->column_end(); ++it) {
+                const ObColumnSchemaV2 *spec_column = *it;
+                if (OB_ISNULL(spec_column)) {
+                  ret = OB_ERR_UNEXPECTED;
+                } else if (spec_column->is_hidden()
+                           && spec_column->get_column_name_str().prefix_match(spec_prefix)
+                           && !spec_column->get_comment_str().empty()) {
+                  has_spec = true;
+                }
+              }
+              if (OB_SUCC(ret) && !has_spec) {
+                ret = OB_NOT_SUPPORTED;
+                LOG_USER_ERROR(OB_NOT_SUPPORTED, "AI COLUMN RETRY target must be an AI column");
+              }
+              if (OB_SUCC(ret)
+                  && OB_FAIL(ob_write_string(alter_arg.allocator_, column_name,
+                                             alter_arg.ai_column_name_, true /* c_style */))) {
+              }
+              ParseNode *where_node = action_node->children_[1];
+              if (OB_SUCC(ret) && OB_NOT_NULL(where_node)) {
+                if (T_WHERE_CLAUSE != where_node->type_ || OB_ISNULL(where_node->str_value_)
+                    || where_node->str_len_ <= 0) {
+                  ret = OB_ERR_UNEXPECTED;
+                  SQL_RESV_LOG(ERROR, "invalid AI COLUMN RETRY predicate node", K(ret), K(where_node->type_),
+                               K(where_node->str_len_));
+                } else if (OB_FAIL(ob_write_string(alter_arg.allocator_,
+                                                   ObString(where_node->str_len_, where_node->str_value_),
+                                                   alter_arg.ai_column_predicate_, true /* c_style */))) {
+                }
+              }
+              if (OB_SUCC(ret)) {
+                alter_arg.is_ai_column_retry_ = true;
+              }
+            }
+          }
+          if (OB_FAIL(ret)) {
+            SQL_RESV_LOG(ERROR, "AI COLUMN RETRY resolution failed", K(ret), K(action_node->num_child_),
+                         K(alter_arg.ai_column_name_), K(alter_arg.ai_column_predicate_));
+          }
+          break;
+        }
         case T_ALTER_INDEX_OPTION_EXTENDED: {
             alter_table_stmt->set_alter_table_index();
             if (OB_FAIL(resolve_extended_index_options(*action_node))) {
@@ -707,6 +806,13 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             // it will use OB_CANT_REMOVE_ALL_FIELDS.
           }
         }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (alter_table_stmt->get_alter_table_arg().is_ai_column_retry_
+          && alter_table_stmt->get_alter_table_action_count() > 1) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "combining AI COLUMN RETRY with another ALTER action");
       }
     }
     if (OB_SUCC(ret)) {
@@ -3455,8 +3561,136 @@ int ObAlterTableResolver::resolve_add_column(const ParseNode &node, ObColumnName
 
         //add column
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(alter_table_stmt->add_column(alter_column_schema))) {
-          } else if (FALSE_IT(alter_table_stmt->set_sql_mode(session_info_->get_sql_mode()))) {
+          ParseNode *ai_attr = NULL;
+          if (OB_NOT_NULL(node.children_[i]) && node.children_[i]->num_child_ > 2
+              && OB_NOT_NULL(node.children_[i]->children_)
+              && OB_NOT_NULL(node.children_[i]->children_[2])) {
+            ParseNode *attrs_node = node.children_[i]->children_[2];
+            for (int64_t attr_idx = 0; attr_idx < attrs_node->num_child_; ++attr_idx) {
+              ParseNode *attr_node = attrs_node->children_[attr_idx];
+              if (OB_NOT_NULL(attr_node) && T_AI_COLUMN == attr_node->type_) {
+                if (OB_NOT_NULL(ai_attr)) {
+                  ret = OB_ERR_COLUMN_SPEC;
+                  LOG_USER_ERROR(OB_ERR_COLUMN_SPEC,
+                                 alter_column_schema.get_column_name_str().length(),
+                                 alter_column_schema.get_column_name());
+                } else {
+                  ai_attr = attr_node;
+                }
+              }
+            }
+          }
+          if (OB_SUCC(ret) && OB_FAIL(alter_table_stmt->add_column(alter_column_schema))) {
+          } else if (OB_SUCC(ret)) {
+            alter_table_stmt->set_sql_mode(session_info_->get_sql_mode());
+          }
+
+          // AI result and hidden-column IDs are allocated in alter-column order
+          // by the DDL service. Reserve the corresponding names here so the
+          // metadata view can associate the hidden columns with the result.
+          if (OB_SUCC(ret) && OB_NOT_NULL(ai_attr)) {
+            int64_t max_retries = 0;
+            if (2 != ai_attr->num_child_ || OB_ISNULL(ai_attr->children_)
+                || OB_ISNULL(ai_attr->children_[0])) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (OB_NOT_NULL(ai_attr->children_[1])) {
+              ParseNode *options = ai_attr->children_[1];
+              if (T_LINK_NODE == options->type_ && 2 == options->num_child_
+                  && OB_NOT_NULL(options->children_[1])) {
+                max_retries = options->children_[1]->value_;
+              }
+            }
+
+            AlterTableSchema &alter_schema = alter_table_stmt->get_alter_table_arg().alter_table_schema_;
+            int64_t preceding_add_columns = 0;
+            for (ObTableSchema::const_column_iterator it = alter_schema.column_begin();
+                 OB_SUCC(ret) && it != alter_schema.column_end(); ++it) {
+              const AlterColumnSchema *prior = static_cast<const AlterColumnSchema *>(*it);
+              if (OB_ISNULL(prior)) {
+                ret = OB_ERR_UNEXPECTED;
+              } else if (OB_DDL_ADD_COLUMN == prior->alter_type_) {
+                ++preceding_add_columns;
+              }
+            }
+            const uint64_t result_column_id = table_schema_->get_max_used_column_id()
+                                              + preceding_add_columns;
+            char state_name[OB_MAX_COLUMN_NAME_LENGTH + 1];
+            char request_name[OB_MAX_COLUMN_NAME_LENGTH + 1];
+            char spec_name[OB_MAX_COLUMN_NAME_LENGTH + 1];
+            char stage_name[OB_MAX_COLUMN_NAME_LENGTH + 1];
+            const int state_name_len = snprintf(state_name, sizeof(state_name),
+                                                "__ai_state_%lu", result_column_id);
+            const int request_name_len = snprintf(request_name, sizeof(request_name),
+                                                  "__ai_request_%lu", result_column_id);
+            const int spec_name_len = snprintf(spec_name, sizeof(spec_name),
+                                               "__ai_spec_%lu_%ld", result_column_id, max_retries);
+            const int stage_name_len = snprintf(stage_name, sizeof(stage_name),
+                                                "__ai_stage_%lu", result_column_id);
+            if (OB_SUCC(ret) && (state_name_len <= 0 || state_name_len >= sizeof(state_name)
+                || request_name_len <= 0 || request_name_len >= sizeof(request_name)
+                || spec_name_len <= 0 || spec_name_len >= sizeof(spec_name)
+                || stage_name_len <= 0 || stage_name_len >= sizeof(stage_name))) {
+              ret = OB_SIZE_OVERFLOW;
+            }
+
+            const char *hidden_names[4] = {state_name, request_name, spec_name, stage_name};
+            const int32_t hidden_name_lens[4] = {state_name_len, request_name_len, spec_name_len, stage_name_len};
+            const common::ColumnType hidden_types[3] = {ObIntType, ObVarcharType, ObVarcharType};
+            for (int64_t hidden_idx = 0; OB_SUCC(ret) && hidden_idx < 4; ++hidden_idx) {
+              AlterColumnSchema hidden;
+              hidden.alter_type_ = OB_DDL_ADD_COLUMN;
+              if (3 == hidden_idx) {
+                if (OB_FAIL(hidden.assign(alter_column_schema))) {
+                } else {
+                  hidden.alter_type_ = OB_DDL_ADD_COLUMN;
+                  hidden.set_table_id(table_schema_->get_table_id());
+                  hidden.set_nullable(true);
+                  hidden.set_is_hidden(true);
+                }
+              } else {
+                hidden.set_table_id(table_schema_->get_table_id());
+                hidden.set_data_type(hidden_types[hidden_idx]);
+                hidden.set_nullable(true);
+                hidden.set_is_hidden(true);
+                hidden.set_charset_type(table_schema_->get_charset_type());
+                hidden.set_collation_type(table_schema_->get_collation_type());
+                if (ObVarcharType == hidden_types[hidden_idx]) {
+                  hidden.set_data_length(1 == hidden_idx ? 128 : 4096);
+                }
+              }
+              ObString hidden_name(hidden_name_lens[hidden_idx], hidden_names[hidden_idx]);
+              ObColumnNameHashWrapper hidden_key(hidden_name);
+              if (OB_NOT_NULL(table_schema_->get_column_schema(hidden_name))
+                  || OB_HASH_EXIST == add_column_names_set.exist_refactored(hidden_key)) {
+                ret = OB_ERR_COLUMN_DUPLICATE;
+                LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, hidden_name.length(), hidden_name.ptr());
+              } else if (OB_FAIL(hidden.set_column_name(hidden_name))) {
+              } else if (OB_FAIL(add_column_names_set.set_refactored(hidden_key))) {
+              } else if (2 == hidden_idx) {
+                ObSqlString normalized_expr;
+                const common::ColumnType result_type = alter_column_schema.get_data_type();
+                const char *system_prompt = ob_is_json_tc(result_type)
+                    ? "Return exactly one valid JSON value; "
+                    : ob_is_integer_type(result_type)
+                        ? "Return exactly one base-10 integer; "
+                        : ob_is_numeric_type(result_type)
+                            ? "Return exactly one base-10 number; "
+                            : ob_is_temporal_type(result_type)
+                                ? "Return one valid SQL date/time value; " : nullptr;
+                if (OB_ISNULL(ai_attr->str_value_) || ai_attr->str_len_ <= 0) {
+                  ret = OB_ERR_UNEXPECTED;
+                } else {
+                  if (OB_NOT_NULL(system_prompt) && OB_FAIL(normalized_expr.append(system_prompt))) {
+                  }
+                  if (OB_SUCC(ret) && OB_FAIL(normalized_expr.append(ai_attr->str_value_, ai_attr->str_len_))) {
+                  }
+                  if (OB_SUCC(ret) && OB_FAIL(hidden.set_comment(normalized_expr.string()))) {
+                  }
+                }
+              }
+              if (OB_SUCC(ret) && OB_FAIL(alter_table_stmt->add_column(hidden))) {
+              }
+            }
           }
         }
       }

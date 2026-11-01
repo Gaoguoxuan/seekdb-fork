@@ -1124,6 +1124,7 @@ class SqlKeywords:
          REMOVE
          REPAIR
          REPEATABLE
+         RETRY
          REPLICATION
          RESET
          RESTORE
@@ -1779,6 +1780,7 @@ class SqlKeywords:
          REMOVE
          REPAIR
          REPEATABLE
+         RETRY
          REPLICA
          REPLICATION
          REPORT

@@ -53,6 +53,14 @@ where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'docs'
   and c.is_hidden = 1;
 three_hidden_columns_per_ai_column
 1
+select count(*) = 2 as typed_staging_columns
+from oceanbase.__all_column c
+join oceanbase.__all_table t on t.table_id = c.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'docs'
+  and c.is_hidden = 1 and c.column_name like '__ai_stage_%';
+typed_staging_columns
+1
 select count(*) = 2 as result_columns_are_user_visible
 from oceanbase.__all_ai_column a
 join oceanbase.__all_table t on t.table_id = a.table_id
@@ -96,7 +104,7 @@ content varchar(20),
 first_ai varchar(200) AI COLUMN (AI_COMPLETE('p0_ddl_complete', content)),
 second_ai varchar(200) AI COLUMN (AI_COMPLETE('p0_ddl_complete', first_ai))
 );
-ERROR 0A000: Not supported feature or function
+ERROR 0A000: AI COLUMN expressions referencing AI result columns not supported
 drop table ai_column_p0_ddl.alter_docs;
 drop table ai_column_p0_ddl.docs;
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_ddl_complete_ep');

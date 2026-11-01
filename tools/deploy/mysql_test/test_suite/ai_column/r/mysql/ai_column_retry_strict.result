@@ -50,19 +50,19 @@ from ai_column_retry_strict.docs where label is not null;
 ready_label_is_readable
 1
 select result from ai_column_retry_strict.docs where id = 2;
-ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+ERROR HY000: AI column is not ready: table_id=<table_id>, column_id=<column_id>
 select id, result from ai_column_retry_strict.docs order by id;
-ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+ERROR HY000: AI column is not ready: table_id=<table_id>, column_id=<column_id>
 select id from ai_column_retry_strict.docs where result is null;
-ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+ERROR HY000: AI column is not ready: table_id=<table_id>, column_id=<column_id>
 select id from ai_column_retry_strict.docs
 where id in (select id from ai_column_retry_strict.docs where result is null);
-ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+ERROR HY000: AI column is not ready: table_id=<table_id>, column_id=<column_id>
 update ai_column_retry_strict.docs
 set category = category where result is null;
-ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+ERROR HY000: AI column is not ready: table_id=<table_id>, column_id=<column_id>
 delete from ai_column_retry_strict.docs where result is null;
-ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+ERROR HY000: AI column is not ready: table_id=<table_id>, column_id=<column_id>
 set session ai_column_strict_read = off;
 select count(*) = 3 as rejected_writes_leave_rows_unchanged
 from ai_column_retry_strict.docs;
@@ -73,7 +73,7 @@ failed_task_rows_cleaned
 1
 set session ai_column_strict_read = on;
 select result from ai_column_retry_strict.docs where id = 1;
-ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+ERROR HY000: AI column is not ready: table_id=<table_id>, column_id=<column_id>
 set session ai_column_strict_read = off;
 alter table ai_column_retry_strict.docs
 retry ai column result
@@ -121,7 +121,7 @@ id	physical_status_row_retried
 2	0
 3	0
 alter table ai_column_retry_strict.docs retry ai column content where id = 1;
-ERROR 0A000: retrying a column that is not an AI column not supported
+ERROR 0A000: AI COLUMN RETRY target must be an AI column not supported
 alter table ai_column_retry_strict.docs
 retry ai column result where id = 1, add column extra_col int;
 ERROR 0A000: combining AI COLUMN RETRY with another ALTER action not supported

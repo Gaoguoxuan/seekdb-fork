@@ -18,6 +18,7 @@
 #define OB_FTS_STOP_WORD_H_
 
 #include "lib/container/ob_iarray.h"
+#include "lib/allocator/ob_allocator.h"
 #include "lib/hash/ob_hashset.h"
 #include "object/ob_object.h"
 #include "data_plane/fts/ob_fts_struct.h"
@@ -78,7 +79,9 @@ public:
 
   int init();
   void destroy();
-  int check_stopword(const ObFTWord &word, bool &is_stopword);
+  int check_stopword(const ObFTWord &word,
+                     common::ObArenaAllocator &allocator,
+                     bool &is_stopword);
 
 private:
   static const int64_t DEFAULT_STOPWORD_BUCKET_NUM = 37L;
@@ -132,6 +135,10 @@ private:
   int64_t stopword_cnt_;
   int64_t min_token_size_;
   int64_t max_token_size_;
+  common::ObArenaAllocator normalize_allocator_;
+  common::ObArenaAllocator stopword_allocator_;
+  static const int64_t ASCII_INLINE_TOKEN_BUFFER_SIZE = 128;
+  char ascii_lower_buf_[ASCII_INLINE_TOKEN_BUFFER_SIZE];
   ObAddWordFlag flag_;
 };
 

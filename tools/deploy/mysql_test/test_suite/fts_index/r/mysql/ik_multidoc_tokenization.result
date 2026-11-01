@@ -1,0 +1,27 @@
+DROP DATABASE IF EXISTS fts_ik_multidoc;
+CREATE DATABASE fts_ik_multidoc;
+USE fts_ik_multidoc;
+CREATE TABLE docs (
+id BIGINT PRIMARY KEY,
+body TEXT
+);
+INSERT INTO docs VALUES
+(1, 'alphaonly'),
+(2, ''),
+(3, 'betaonly'),
+(4, 'gammaonly'),
+(5, 'deltaonly');
+CREATE FULLTEXT INDEX idx_body ON docs(body) WITH PARSER ik;
+SELECT id FROM docs WHERE MATCH(body) AGAINST('alphaonly' IN BOOLEAN MODE);
+id
+1
+SELECT id FROM docs WHERE MATCH(body) AGAINST('betaonly' IN BOOLEAN MODE);
+id
+3
+SELECT id FROM docs WHERE MATCH(body) AGAINST('gammaonly' IN BOOLEAN MODE);
+id
+4
+SELECT id FROM docs WHERE MATCH(body) AGAINST('deltaonly' IN BOOLEAN MODE);
+id
+5
+DROP DATABASE fts_ik_multidoc;

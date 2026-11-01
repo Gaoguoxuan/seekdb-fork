@@ -181,6 +181,16 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   skip_locked_ = other.skip_locked_;
   node_ = other.node_; // should deep copy ? seems to be unnecessary
   snapshot_query_type_ = other.snapshot_query_type_;
+  is_file_sql_table_ = other.is_file_sql_table_;
+  is_file_sql_json_ = other.is_file_sql_json_;
+  is_file_sql_parquet_ = other.is_file_sql_parquet_;
+  is_file_sql_glob_ = other.is_file_sql_glob_;
+  file_sql_version_ = other.file_sql_version_;
+  file_sql_has_header_ = other.file_sql_has_header_;
+  file_sql_delimiter_ = other.file_sql_delimiter_;
+  file_sql_quote_ = other.file_sql_quote_;
+  file_sql_escape_ = other.file_sql_escape_;
+  file_sql_null_string_ = other.file_sql_null_string_;
   // ddl related
   ddl_schema_version_ = other.ddl_schema_version_;
   ddl_table_id_ = other.ddl_table_id_;
@@ -190,6 +200,8 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
       && OB_FAIL(deep_copy_json_table_def(*other.json_table_def_, expr_copier, allocator))) {
   } else if (OB_FAIL(expr_copier.copy(other.snapshot_query_expr_, snapshot_query_expr_))) {
   } else if (OB_FAIL(expr_copier.copy(other.function_table_expr_, function_table_expr_))) {
+  } else if (OB_NOT_NULL(allocator) && !other.file_sql_null_string_.empty()
+             && OB_FAIL(ob_write_string(*allocator, other.file_sql_null_string_, file_sql_null_string_))) {
   } else if (OB_FAIL(part_ids_.assign(other.part_ids_))) {
   } else if (OB_FAIL(part_names_.assign(other.part_names_))) {
   } else if (is_values_table() &&
@@ -1555,6 +1567,9 @@ int ObDMLStmt::formalize_stmt_expr_reference(ObRawExprFactory *expr_factory,
       if (OB_ISNULL(column_item.expr_) ||
           OB_ISNULL(table_item = get_table_item_by_id(column_item.table_id_))) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (table_item->is_file_sql_table_) {
+        // File SQL columns are registered up front for dynamic schema resolution.
+        // Statement expressions above mark only the columns this query actually needs.
       } else if (table_item->is_function_table() ||
                  table_item->is_json_table() ||
                  table_item->for_update_ ||

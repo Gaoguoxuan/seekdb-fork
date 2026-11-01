@@ -109,6 +109,165 @@ protected:
   ObIAllocator &allocator_;
 };
 
+// A bounded, forward-only CSV record reader used by FileSQL scans. It keeps
+// input in a small fixed-size window and returns fields as views into the
+// caller-owned row buffer. The views remain valid until the next call.
+class ObFileSQLCSVReader
+{
+public:
+  static const int64_t INPUT_BUFFER_SIZE = 8192;
+  static const int64_t INITIAL_ROW_BUFFER_SIZE = 8192;
+  static const int64_t MAX_ROW_BUFFER_SIZE = 1024 * 1024;
+  ObFileSQLCSVReader();
+  ~ObFileSQLCSVReader();
+  int init(ObFileReader &file_reader,
+           common::ObIAllocator &allocator,
+           char *row_buffer,
+           const int64_t row_buffer_size,
+           const char field_delimiter = ',',
+           const char quote_char = '"',
+           const char escape_char = '"');
+  int next_row(common::ObIArray<common::ObString> &fields);
+  int rewind();
+  void reuse();
+
+private:
+  int read_byte(char &c, bool &is_eof);
+  int ensure_record_capacity(const int64_t required_size, const int64_t record_len);
+  int read_record(int64_t &record_len);
+  int parse_record(const int64_t record_len,
+                   common::ObIArray<common::ObString> &fields);
+
+private:
+  ObFileReader *file_reader_;
+  common::ObIAllocator *allocator_;
+  char *input_buffer_;
+  int64_t input_pos_;
+  int64_t input_len_;
+  char *row_buffer_;
+  int64_t row_buffer_size_;
+  char field_delimiter_;
+  char quote_char_;
+  char escape_char_;
+  bool input_eof_;
+  bool is_inited_;
+};
+
+enum ObFileSQLType : int8_t
+{
+  OB_FILE_SQL_NULL = 0,
+  OB_FILE_SQL_BIGINT,
+  OB_FILE_SQL_DOUBLE,
+  OB_FILE_SQL_BOOLEAN,
+  OB_FILE_SQL_DATE,
+  OB_FILE_SQL_DATETIME,
+  OB_FILE_SQL_VARCHAR,
+};
+
+class ObFileSQLSchema
+{
+public:
+  ObFileSQLSchema() : column_names_(), column_types_(), column_nullable_() {}
+  int infer_csv_schema(ObFileSQLCSVReader &reader,
+                       common::ObIAllocator &allocator,
+                       const bool has_header,
+                       common::ObIArray<common::ObString> &fields,
+                       const common::ObString &null_string = common::ObString());
+  int infer_jsonl_schema(ObFileSQLCSVReader &reader,
+                         common::ObIAllocator &allocator,
+                         common::ObIArray<common::ObString> &fields);
+  static ObFileSQLType infer_value_type(const common::ObString &value,
+                                        const common::ObString &null_string = common::ObString());
+  static ObFileSQLType merge_types(const ObFileSQLType left, const ObFileSQLType right);
+  static uint64_t calc_file_signature(const uint64_t dev,
+                                      const uint64_t ino,
+                                      const int64_t size,
+                                      const int64_t mtime_sec,
+                                      const int64_t mtime_nsec,
+                                      const int64_t ctime_sec,
+                                      const int64_t ctime_nsec);
+  const common::ObIArray<common::ObString> &get_column_names() const { return column_names_; }
+  const common::ObIArray<ObFileSQLType> &get_column_types() const { return column_types_; }
+  const common::ObIArray<bool> &get_column_nullable() const { return column_nullable_; }
+  void reset();
+
+private:
+  int add_column_names(common::ObIAllocator &allocator,
+                       const common::ObIArray<common::ObString> &fields);
+  int append_unique_column_name(common::ObIAllocator &allocator,
+                                const common::ObString &name,
+                                const int64_t column_idx);
+  int make_column_name(common::ObIAllocator &allocator,
+                       const common::ObString &name,
+                       const int64_t suffix,
+                       common::ObString &column_name);
+
+private:
+  common::ObSEArray<common::ObString, 16> column_names_;
+  common::ObSEArray<ObFileSQLType, 16> column_types_;
+  common::ObSEArray<bool, 16> column_nullable_;
+};
+
+struct FileSQLParquetSchemaColumn
+{
+  FileSQLParquetSchemaColumn() : name_(), physical_type_(-1), repetition_type_(0), child_count_(0) {}
+  common::ObString name_;
+  int32_t physical_type_;
+  int32_t repetition_type_;
+  int32_t child_count_;
+};
+
+struct FileSQLParquetColumnMeta
+{
+  FileSQLParquetColumnMeta()
+      : physical_type_(-1), codec_(-1), value_count_(0), total_uncompressed_size_(0),
+        compressed_size_(0), data_page_offset_(-1), dictionary_page_offset_(-1) {}
+  int32_t physical_type_;
+  int32_t codec_;
+  int64_t value_count_;
+  int64_t total_uncompressed_size_;
+  int64_t compressed_size_;
+  int64_t data_page_offset_;
+  int64_t dictionary_page_offset_;
+};
+
+// The reader loads one bounded row group at a time. It keeps only that group's
+// decoded values so scans and rewinds do not materialize the whole file.
+class ObFileSQLParquetReader
+{
+public:
+  ObFileSQLParquetReader();
+  int init(ObFileReader &file_reader, common::ObIAllocator &allocator,
+           const common::ObIArray<int64_t> *selected_column_indexes = nullptr);
+  int next_row(common::ObIArray<common::ObString> &fields);
+  int rewind();
+  const common::ObIArray<common::ObString> &get_column_names() const { return column_names_; }
+  const common::ObIArray<ObFileSQLType> &get_column_types() const { return column_types_; }
+
+private:
+  int load_row_group(const int64_t row_group_idx);
+
+private:
+  ObFileReader *file_reader_;
+  common::ObIAllocator *allocator_;
+  common::ObArenaAllocator row_group_allocator_;
+  common::ObArenaAllocator scratch_allocator_;
+  common::ObSEArray<common::ObString, 16> column_names_;
+  common::ObSEArray<ObFileSQLType, 16> column_types_;
+  common::ObSEArray<FileSQLParquetSchemaColumn, 16> schema_columns_;
+  common::ObSEArray<FileSQLParquetColumnMeta, 64> column_metas_;
+  common::ObSEArray<int64_t, 16> row_group_counts_;
+  common::ObSEArray<int64_t, 16> selected_column_indexes_;
+  common::ObSEArray<common::ObString, 64> column_values_;
+  int64_t file_size_;
+  int64_t row_count_;
+  int64_t current_row_;
+  int64_t current_row_group_idx_;
+  int64_t current_row_in_group_;
+  int64_t current_row_group_count_;
+  bool is_inited_;
+};
+
 /**
  * Stream file that can read sequential only
  */

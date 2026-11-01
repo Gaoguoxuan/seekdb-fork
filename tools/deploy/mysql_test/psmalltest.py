@@ -71,6 +71,7 @@ psmall_test=[
 'fts_index.create_table_with_fts_index',
 'fts_index.drop_index',
 'fts_index.index_view',
+'fts_index.ik_multidoc_tokenization',
 'fts_index.load_data',
 'fts_index.offline_ddl_with_fts_index',
 'fts_index.online_ddl_on_table_with_fts_index',

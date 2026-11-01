@@ -1852,7 +1852,21 @@ int ObSelectResolver::resolve_all_function_table_columns(
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(column_items));
-  OZ (resolve_function_table_column_item(table_item, *column_items));
+  if (OB_SUCC(ret) && table_item.is_file_sql_table_) {
+    ObDMLStmt *stmt = get_stmt();
+    if (OB_ISNULL(stmt)) {
+      ret = OB_NOT_INIT;
+    } else {
+      const ObIArray<ColumnItem> &all_column_items = stmt->get_column_items();
+      for (int64_t i = 0; OB_SUCC(ret) && i < all_column_items.count(); ++i) {
+        if (all_column_items.at(i).table_id_ == table_item.table_id_) {
+          ret = column_items->push_back(all_column_items.at(i));
+        }
+      }
+    }
+  } else if (OB_SUCC(ret)) {
+    OZ (resolve_function_table_column_item(table_item, *column_items));
+  }
   return ret;
 }
 

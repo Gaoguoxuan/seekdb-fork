@@ -2446,6 +2446,31 @@ all_ai_model_endpoint_def = dict(
 )
 def_table_schema(**all_ai_model_endpoint_def)
 
+def_table_schema(
+  owner = 'codex',
+  table_name = '__all_ai_column_task',
+  table_id = '1131',
+  table_type = 'SYSTEM_TABLE',
+  gm_columns = ['gmt_create', 'gmt_modified'],
+  rowkey_columns = [
+    ('task_id', 'int')
+  ],
+  is_cluster_private = False,
+  meta_record_in_sys = False,
+  normal_columns = [
+    ('table_id', 'int', 'false'),
+    ('column_id', 'int', 'false'),
+    ('definition_version', 'int', 'false', 0),
+    ('request_id', 'varchar:128', 'false'),
+    ('rowkey_predicate', 'varchar:2048', 'false'),
+    ('state', 'int', 'false'),
+    ('retry_count', 'int', 'false', 0),
+    ('max_retries', 'int', 'false', 0),
+    ('eligible_ts', 'timestamp:6', 'false'),
+    ('last_error', 'varchar:OB_MAX_ERROR_MSG_LEN', 'true')
+  ]
+)
+
 
 all_objauth_mysql_def = dict(
     owner = 'cjl476581',
@@ -13864,6 +13889,39 @@ def_table_schema(
       FETCH_SCN
     FROM oceanbase.__all_virtual_change_stream_refresh_stat
   """.replace("\n", " ")
+)
+
+def_table_schema(
+  owner           = 'codex',
+  table_name      = '__all_ai_column',
+  table_id        = '21669',
+  table_type      = 'SYSTEM_VIEW',
+  rowkey_columns  = [],
+  normal_columns  = [],
+  gm_columns      = [],
+  view_definition = """
+  SELECT
+    result.table_id AS table_id,
+    result.column_id AS column_id,
+    result.column_name AS column_name,
+    state.column_id AS state_column_id,
+    request.column_id AS request_column_id,
+    spec.column_id AS result_spec_column_id,
+    CAST(SUBSTRING_INDEX(spec.column_name, '_', -1) AS UNSIGNED) AS max_retries,
+    spec.comment AS normalized_expr
+  FROM oceanbase.__all_column result
+  JOIN oceanbase.__all_column state
+    ON state.table_id = result.table_id
+   AND state.column_name = CONCAT('__ai_state_', result.column_id)
+  JOIN oceanbase.__all_column request
+    ON request.table_id = result.table_id
+   AND request.column_name = CONCAT('__ai_request_', result.column_id)
+  JOIN oceanbase.__all_column spec
+    ON spec.table_id = result.table_id
+   AND spec.column_name LIKE CONCAT('__ai_spec_', result.column_id, '_%')
+  WHERE result.is_hidden = 0
+    AND spec.comment IS NOT NULL
+""".replace("\n", " ")
 )
 
 # Reserved position (placeholder before this line)

@@ -978,6 +978,19 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
     das_dml_info.column_accuracys_.set_capacity(column_count);
     das_dml_info.rowkey_cnt_ = index_schema->get_rowkey_info().get_size();
     das_dml_info.spk_cnt_ = index_schema->get_shadow_rowkey_info().get_size();
+    das_dml_info.is_ai_column_table_ = false;
+    const ObString ai_spec_prefix = ObString::make_string("__ai_spec_");
+    for (ObTableSchema::const_column_iterator iter = index_schema->column_begin();
+         OB_SUCC(ret) && !das_dml_info.is_ai_column_table_
+             && iter != index_schema->column_end(); ++iter) {
+      const ObColumnSchemaV2 *column = *iter;
+      if (OB_ISNULL(column)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (column->is_hidden()
+                 && column->get_column_name_str().prefix_match(ai_spec_prefix)) {
+        das_dml_info.is_ai_column_table_ = true;
+      }
+    }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < index_schema->get_rowkey_info().get_size(); ++i) {
     const ObRowkeyInfo &rowkey_info = index_schema->get_rowkey_info();

@@ -17,13 +17,14 @@
 #ifndef OCEANBASE_OBSERVER_OMT_OB_AI_SERVICE_H_
 #define OCEANBASE_OBSERVER_OMT_OB_AI_SERVICE_H_
 
-#include "share/ai_service/ob_ai_service_struct.h"
-#include "share/rc/ob_server_runtime.h"
-#include "lib/lock/ob_tc_rwlock.h"
 #include "lib/container/ob_se_array.h"
-#include "sql/privilege_check/ob_ai_model_priv_util.h"
-#include "share/ob_server_struct.h"
+#include "lib/lock/ob_tc_rwlock.h"
+#include "lib/task/ob_timer.h"
 #include "lib/worker.h"
+#include "share/ai_service/ob_ai_service_struct.h"
+#include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
+#include "sql/privilege_check/ob_ai_model_priv_util.h"
 
 namespace oceanbase
 {
@@ -35,12 +36,30 @@ class ObAiServiceGuard
 public:
   ObAiServiceGuard();
   ~ObAiServiceGuard();
-  int get_ai_endpoint(const common::ObString &name, const share::ObAiModelEndpointInfo *&endpoint_info);
-  int get_ai_endpoint_by_ai_model_name(const common::ObString &ai_model_name, const share::ObAiModelEndpointInfo *&endpoint_info, bool need_check = true);
+  int get_ai_endpoint(const common::ObString& name, const share::ObAiModelEndpointInfo*& endpoint_info);
+  int get_ai_endpoint_by_ai_model_name(const common::ObString& ai_model_name, const share::ObAiModelEndpointInfo*& endpoint_info, bool need_check = true);
+
 private:
   int check_access_privilege();
   ObArenaAllocator local_allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObAiServiceGuard);
+};
+
+class ObAiColumnTaskWorker : public common::ObTimerTask
+{
+public:
+  ObAiColumnTaskWorker();
+  int init();
+  int start(common::ObTimer& timer);
+  void stop(common::ObTimer& timer);
+  void destroy();
+  virtual void runTimerTask() override;
+
+private:
+  bool is_inited_;
+  int64_t fail_count_;
+  static const int64_t SCHEDULE_INTERVAL_US = 100 * 1000L;
+  DISALLOW_COPY_AND_ASSIGN(ObAiColumnTaskWorker);
 };
 
 class ObAiService
@@ -48,16 +67,20 @@ class ObAiService
 public:
   ObAiService();
   virtual ~ObAiService();
-  static int server_module_init(ObAiService* &ai_service);
+  static int server_module_init(ObAiService*& ai_service);
   int init();
-  int start() { return OB_SUCCESS; }
-  void stop() {};
-  void wait() {};
+  int start();
+  void stop();
+  void wait();
   void destroy();
+
 public:
-  int get_ai_service_guard(ObAiServiceGuard &ai_service_guard);
+  int get_ai_service_guard(ObAiServiceGuard& ai_service_guard);
+
 private:
   bool is_inited_;
+  common::ObTimer timer_;
+  ObAiColumnTaskWorker task_worker_;
   DISALLOW_COPY_AND_ASSIGN(ObAiService);
 };
 
